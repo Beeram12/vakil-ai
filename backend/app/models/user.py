@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime, timezone
+from app.core.config import Base
 
 
 class User(Base):
