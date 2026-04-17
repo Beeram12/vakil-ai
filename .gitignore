@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+temp/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Secrets & keys
+*.pem
+*.key
+
+# Database
+*.db
+*.sqlite3
+
+# Data (raw legal docs can be large — re-download via scripts)
+data/raw/
+
+# Alembic
+# (keep alembic/versions/ committed — those are your migration history)
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env
+frontend/.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
