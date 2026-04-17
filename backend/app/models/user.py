@@ -2,7 +2,7 @@ import uuid
 from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime, timezone
-from app.core.config import Base
+from app.core.database import Base
 
 
 class User(Base):
@@ -11,13 +11,13 @@ class User(Base):
     # uuid as primar key
     id: Mapped[str] = mapped_column(String,
                                     primary_key=True,
-                                    default=lambda: str(uuid.uuid4))
+                                    default=lambda: str(uuid.uuid4()))
 
     # for google's OAuth and signup,login
-    google_id: Mapped[str] = mapped_column(String,
-                                           unique=True,
-                                           nullable=False,
-                                           index=True)
+    google_id: Mapped[str | None] = mapped_column(String,
+                                                  unique=True,
+                                                  nullable=True,
+                                                  index=True)
     email: Mapped[str] = mapped_column(String,
                                        unique=True,
                                        nullable=False,
@@ -27,7 +27,7 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # date,time
-    create_at: Mapped[datetime] = mapped_column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
