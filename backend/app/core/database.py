@@ -1,58 +1,73 @@
-"""
-database.py — SQLAlchemy setup
-
-Three things live here:
-  1. engine      — the actual connection to PostgreSQL (one per process)
-  2. SessionLocal — a factory that creates DB sessions (one per request)
-  3. Base        — the parent class all ORM models inherit from
-
-Why SQLAlchemy?
-  - Lets you write Python classes (models) instead of raw SQL
-  - Handles connection pooling automatically
-  - Works with Alembic for schema migrations
-
-Why not async?
-  psycopg2-binary is a synchronous driver. For CP1 this is fine.
-  We can upgrade to asyncpg + async SQLAlchemy later if needed.
-"""
-
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
-from app.core.config import settings
+from app.core.config import settings as s
+from app.core.logger import setup_logger
 
-# create_engine() sets up the connection pool.
-# pool_pre_ping=True: before reusing an idle connection, SQLAlchemy sends
-# a cheap "SELECT 1" to check it's still alive. Prevents "connection gone stale" errors
-# which are common on Railway where idle connections get dropped.
-engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+logger = setup_logger(__name__)
 
-# SessionLocal is not a session itself — it's a class you call to get a session.
-# autocommit=False: changes don't go to DB until you explicitly call session.commit()
-# autoflush=False:  changes don't flush to DB before each query (better control)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# URL.create() builds the connection URL safely.
+# It handles special characters in the password (like @, #, %) automatically,
+# which breaks when you embed them directly in an f-string URL.
+db_url = URL.create(
+    drivername="postgresql+psycopg2",
+    username=s.DB_USER,
+    password=s.DB_PASSWORD,   # @ or any special char is safe here
+    host=s.DB_HOST,
+    port=s.DB_PORT,
+    database=s.DB_NAME,
+    query={"sslmode": "require"},  # Supabase requires SSL
+)
+
+logger.info("Creating database engine → host=%s port=%s db=%s", s.DB_HOST, s.DB_PORT, s.DB_NAME)
+
+engine = create_engine(
+    db_url,
+    pool_size=5,        # keep 5 connections open at all times
+    max_overflow=10,    # allow up to 10 extra when pool is full (max 15 total)
+    pool_timeout=30,    # wait max 30s for a free connection before raising an error
+    pool_recycle=1800,  # replace connections older than 30 min (prevents stale connection errors)
+    pool_pre_ping=True, # test each connection with SELECT 1 before using it
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,  # you must call session.commit() explicitly to save changes
+    autoflush=False,   # SQLAlchemy won't auto-sync pending changes before queries
+    bind=engine,
+)
 
 
 class Base(DeclarativeBase):
-    """
-    All ORM model classes inherit from this Base.
-    It keeps a registry of all tables so Alembic can auto-generate migrations.
-    """
+    # All ORM models inherit from this.
+    # SQLAlchemy uses it to track every table across the app.
     pass
 
 
 def get_db():
-    """
-    FastAPI dependency — yields a DB session for the duration of one request,
-    then closes it automatically (even if an exception occurs).
-
-    Usage in a route:
-        @router.get("/something")
-        def my_route(db: Session = Depends(get_db)):
-            ...
-    """
+    # FastAPI dependency — call this with Depends(get_db) in any route.
+    # Gives the route a DB session, then closes it when the request finishes.
     db = SessionLocal()
     try:
+        logger.debug("Opening DB session")
         yield db
+    except Exception as e:
+        logger.error("DB session error: %s", e)
+        db.rollback()
+        raise
     finally:
+        logger.debug("Closing DB session")
         db.close()
+
+
+def check_db_connection() -> bool:
+    # Call this at startup to verify the DB is reachable.
+    # Returns True if connected, False if not.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        logger.info("Database connection successful")
+        return True
+    except Exception as e:
+        logger.error("Database connection failed: %s", e)
+        return False
