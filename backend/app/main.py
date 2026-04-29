@@ -12,12 +12,11 @@ To run locally:
 The --reload flag restarts the server automatically whenever you save a file.
 """
 
-from backend.app.api.routes import auth, chat
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from backend.app.api.routes import health
+from app.api.routes import health, auth, chat
 
 app = FastAPI(
     title="Vakil AI",
